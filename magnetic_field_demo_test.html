@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Honors Physics VR Lab</title>
+		<!--
+		Attribution
+		eleVR webvr boilerplate: https://github.com/hawksley
+		Scanned sculptures "Unscannables": Emily Eifler
+		eleVR Real Virtual Physics: https://github.com/vihart
+		-->
+	</head>
+
+	<body>
+
+	</body>
+
+	<script src="js/my_grab.js"></script>
+	<script src="js/three.min.js"></script>
+	<script src="js/VRControls.js"></script>
+	<script src="js/VREffect.js"></script>
+	<script src="lib/gl-matrix.js"></script>
+	<script src="loaders/OBJloader.js"></script>
+	<script src="loaders/MTLLoader.js"></script>
+	<script src="loaders/OBJMTLLoader.js"></script>
+	<script src="js/PhoneVR.js"></script>
+
+	<script>
+
+	</script>	
+
+	<script>
+
+		//Constants
+		var pi = 3.1415926535897932384626433832795;
+		var c=1/15; 							//Floor scale factor
+		var editMode=true; 						//For removing inhabitants from view (gallery mode in key bindings)
+		var vrMode = false;						//For entering VR display through trigger key(s)
+		var partmove=false;						//For part motion start/stop
+		var arradd=false;						//For adding arrows to non-proxy objects
+		var fresh_arr=false;					//For arrow mesh refresh
+		var electric_charge=1.6021765e-19; 		//Units Coulombs
+		var kap=8.988e9; 						//Units m/F
+		var mu=4*Math.PI*1e-7;					//Units H/m
+		var mag_moment=1						//Units J/T
+
+		//Scene Setup
+		var scene=new THREE.Scene();
+		var camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,.001,10000);
+		var renderer=new THREE.WebGLRenderer({antialias:true});
+		document.body.appendChild(renderer.domElement);
+
+		//VR Stuff
+		var controls=new THREE.VRControls(camera,undefined,4); 	//Apply VR headset positional data to camera
+		var effect=new THREE.VREffect(renderer);				//Apply VR stereo rendering to renderer
+		effect.setSize(window.innerWidth,window.innerHeight);
+
+		//Container for all inhabitants of scene
+		var everything=new THREE.Object3D;
+
+		//Environment Setup
+		//Skybox
+		var skyTexture = new THREE.ImageUtils.loadTexture( "images/sky.jpg" );
+		var skyMaterial = new THREE.MeshBasicMaterial( { map: skyTexture, side: THREE.DoubleSide } );
+		var skyGeometry1 = new THREE.SphereGeometry(55, 30, 30);
+		var skybox = new THREE.Mesh( skyGeometry1, skyMaterial );
+		everything.add( skybox );
+		//Floor
+		var floorImage = new THREE.ImageUtils.loadTexture( "images/floor.jpg" );
+		floorImage.wrapS = floorImage.wrapT = THREE.RepeatWrapping;
+		floorImage.repeat.set( 10, 10 );
+		var floorGeometry = new THREE.PlaneBufferGeometry( 150*c, 150*c, 10 );
+		var floorMaterial = new THREE.MeshBasicMaterial( {map: floorImage, color: 0x0475a1, side: THREE.DoubleSide} );
+		var floor = new THREE.Mesh( floorGeometry, floorMaterial );
+		floor.rotation.x = 90 * Math.PI/180;
+		floor.position.y = 0;
+		floor.scale.set(8,8,8);
+		everything.add( floor );
+
+		//Grab Setup
+		var grabbables = []; 			//for objects
+		var grabRadius = []; 			//for collision
+		var proxy_box  = [];			//for proxy objects
+		var handPosVector = new THREE.Vector3(0,0,0);
+
+		var relative = [];
+
+		//Manually setup space for user (contollers reached through controls.controllers)
+		var manualPosition = new THREE.Vector3(0.0,-0.04,0.0); 		//for default position in a room, Vive mostly:
+		everything.position.set(manualPosition.x, manualPosition.y, manualPosition.z);
+		var manualRotation = 0;										//default rotation around vertical axis, in radians
+		everything.rotation.y = manualRotation;
+
+
+		var hands = {};
+
+		//Inhabitants of Scene
+
+		//Read in the source data for the current ring and current segment
+
+		//Loads in the data precalculated from python integrator file for current ring
+		var url = "current_ring_mag_data.txt";
+
+		var ring_checker=[];
+
+		var ring_ajax = new XMLHttpRequest();
+		ring_ajax.open("GET", url, true);
+		ring_ajax.send(null);
+		ring_ajax.onreadystatechange = function () {
+
+		     if (ring_ajax.readyState == 4 && (ring_ajax.status == 200)) {
+
+		        //console.log("ready");            
+		        var ring_Data = JSON.parse(ring_ajax.responseText);
+		        //console.log(Data);
+		        //console.log(Data.first);
+		        ring_checker.push(ring_Data);
+
+		    } else {
+		        //console.log("not ready yet");            
+		    };
+		};
+
+		//Reformat the data loaded from data file to be used in javascript
+
+		//Have to wait for data to be loaded in so setup interval check
+		var ring_data_read_check=setInterval(ring_data_convert,10);
+
+		var ring_mag_data=[];
+
+		function ring_data_convert(){
+			//console.log("it is calling");
+			if(ring_checker[0]!=undefined){
+
+				for(var a=0;a<ring_checker[0].length;a++){
+					ring_mag_data.push(JSON.parse(ring_checker[0][a]));
+				};
+				clearInterval(ring_data_read_check);			
+			}else{
+				console.log("still no");
+			};
+		};
+
+		//Loads in the data precalculated from python integrator file for current segment
+		var url = "current_segment_mag_data.txt";
+
+		var line_checker=[];
+
+		var line_ajax = new XMLHttpRequest();
+		line_ajax.open("GET", url, true);
+		line_ajax.send(null);
+		line_ajax.onreadystatechange = function () {
+
+		     if (line_ajax.readyState == 4 && (line_ajax.status == 200)) {
+
+		        //console.log("ready");            
+		        var line_Data = JSON.parse(line_ajax.responseText);
+		        //console.log(Data);
+		        //console.log(Data.first);
+		        line_checker.push(line_Data);
+
+		    } else {
+		        //console.log("not ready yet");            
+		    };
+		};
+
+		//Reformat the data loaded from data file to be used in javascript
+
+		//Have to wait for data to be loaded in so setup interval check
+		var line_data_read_check=setInterval(line_data_convert,10);
+
+		var line_mag_data=[];
+
+		function line_data_convert(){
+			//console.log("it is calling");
+			if(line_checker[0]!=undefined){
+
+				for(var a=0;a<line_checker[0].length;a++){
+					line_mag_data.push(JSON.parse(line_checker[0][a]));
+				};
+				clearInterval(line_data_read_check);			
+			}else{
+				console.log("still no");
+			};
+		};		
+
+
+		//Generate and place rulers on the floor
+		/*
+		var ruler = [];
+		var rulerNumber = 3;
+		var rulerTexture = new THREE.ImageUtils.loadTexture( "images/ruler.png" );
+		var rulerMaterial = new THREE.MeshBasicMaterial( { map: rulerTexture } )
+		var rulerGeometry = new THREE.BoxGeometry(1,0.01,0.05)
+		for (var i = 0; i < rulerNumber; i++){
+			ruler[i] = new THREE.Mesh(
+				rulerGeometry,
+				rulerMaterial
+				);
+			ruler[i].position.z =.5+i/2;
+			grabbables.push(ruler[i]);
+			grabRadius.push(0.1);
+			everything.add(grabbables[i]);
+		}
+		*/
+
+
+
+	    //Generate Vector Field (Visualization)
+
+
+
+		scene.add(everything);
+
+		var create_pos_count=0;
+		var create_neg_count=0;
+		var create_test_count=0;
+		var create_pos_line_count=0;
+		var create_neg_line_count=0;		
+		var start_count=0;
+		var move_count=0;
+		var reset_count=0;
+		var test_part_move;
+		var arrow_refresh;
+		var remove_proxy;
+		var proxy_count=0;
+		var ring_data_check;
+		var line_data_check;
+
+		var length = .1;
+		var hex = 0xff0000;
+	    var headwid=.025;
+      	var headlen=.04;
+
+		//Setup up animation function
+		function animate() {
+			t = Date.now();
+			//console.log(t);
+
+
+
+
+			if(left==undefined||right==undefined){//Check that controllers are connected
+				//console.log('not yet');
+			};
+
+			if(left!==undefined&&right!==undefined){						
+				
+				//Opens menu options to add object
+				if(left.buttons[0].pressed&&!right.buttons[0].pressed){
+					if(menu_options.length==0){
+						console.log('menu up');
+
+						//Magnetic Point Dipole
+						var sphere_geo = new THREE.SphereGeometry(.05,32,32);
+					    sphere_geo.faces.forEach(function(face){face.color.setRGB(1,0,0)});
+					    var sphere = new THREE.Mesh( sphere_geo, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+					    sphere.grabbed=false;
+					    sphere.group="Point";
+					    sphere.arradd=false;
+					    //proxy_box.push(sphere);
+					    grabbables.push(sphere);
+					    grabRadius.push(.05);
+						sphere.position.set((left.pose.position[0] - everything.position.x)/everything.scale.x+.3*Math.cos(2.*pi/2.), (left.pose.position[1] - everything.position.y)/everything.scale.y+.3*Math.sin(2.*pi/2.), (left.pose.position[2] - everything.position.z)/everything.scale.z);
+					    everything.add(sphere);
+					    menu_options.push(sphere);	
+
+						//Ring of current
+					    var ring_geo = new THREE.TorusGeometry(.2,.01,40,40);
+					    ring_geo.faces.forEach(function(face){face.color.setRGB(1,0,0)});
+					    var ring = new THREE.Mesh( ring_geo, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );					    
+						ring.grabbed=false;
+						ring.group="Ring";
+						ring.arradd=false;
+						//proxy_box.push(ring);
+					    grabbables.push(ring);
+					    grabRadius.push(.05);
+						ring.position.set((left.pose.position[0] - everything.position.x)/everything.scale.x+.3*Math.cos(1.*pi/2.), (left.pose.position[1] - everything.position.y)/everything.scale.y+.3*Math.sin(1.*pi/2.), (left.pose.position[2] - everything.position.z)/everything.scale.z);
+					    everything.add(ring);
+					    menu_options.push(ring);	
+
+						//Segment of current
+					    var line_geo = new THREE.CylinderGeometry(.01,.01,.4,40,40);
+					    line_geo.faces.forEach(function(face){face.color.setRGB(1,0,0)});
+					    var line = new THREE.Mesh( line_geo, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+					    line.grabbed=false;
+					    line.group="Line";
+					    line.arradd=false;
+					    //proxy_box.push(line);
+					    grabbables.push(line);
+					    grabRadius.push(.05);
+						line.position.set((left.pose.position[0] - everything.position.x)/everything.scale.x+.3*Math.cos(0.*pi/2.), (left.pose.position[1] - everything.position.y)/everything.scale.y+.3*Math.sin(0.*pi/2.), (left.pose.position[2] - everything.position.z)/everything.scale.z);
+					    everything.add(line);
+					    menu_options.push(line);					   
+	
+					};			    				    			    					    					    					
+				//Remove menu options when the button is not pressed
+				}else if(!left.buttons[0].pressed&&!right.buttons[0].pressed){
+					if(menu_options.length!=0){
+						for(var h=0;h<menu_options.length;h++){
+							everything.remove(menu_options[h]);
+						};						
+						for(var q=0;q<grabbables.length;q++){
+							if(grabbables[q]==menu_options[0]){
+								grabbables.splice(q,1);
+								grabRadius.splice(q,1);
+								//proxy_box.splice(q,1);
+							};
+							if(grabbables[q]==menu_options[1]){
+								grabbables.splice(q,1);
+								grabRadius.splice(q,1);
+								//proxy_box.splice(q,1);
+							};
+							if(grabbables[q]==menu_options[2]){
+								grabbables.splice(q,1);
+								grabRadius.splice(q,1);
+								//proxy_box.splice(q,1);
+							};																																			
+						};
+						menu_options=[];
+					};
+
+				};		
+
+				//Add the arrows to the proxy objects instead of having them present during the menu
+				if((left.buttons[3].pressed||right.buttons[3].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					start_count++;
+					if(start_count>120&&!arradd){ //Additional constraint from partmove so that it does not keep redoing setInterval (save computation)
+						start_count=0;
+						console.log('start');
+						//arradd=true;
+						//remove_proxy=setInterval(rem_proxy,10);
+						//proxy_count=0;
+						//Add the arrows to the proxy objects
+				        grabbables.forEach(function(obj){
+				        	if(obj.group=="Point"&&obj.arradd==false){
+							    for(var a=0.;a<2*pi;a=a+(pi/2.)){
+							    	for(var b=0.;b<=.4;b=b+.2){
+							    		for(var c=-.4;c<=.4;c=c+.2){
+							    			var sep=Math.sqrt(b*Math.cos(a)*b*Math.cos(a)+b*Math.sin(a)*b*Math.sin(a)+c*c);	    			
+							    			if(sep!=0){
+												var coeff=(mu*mag_moment)/(4*Math.PI*sep*sep*sep);
+												var xcom=3*c*b*Math.cos(a)/(sep*sep);
+												var ycom=3*c*b*Math.sin(a)/(sep*sep);
+												var zcom=(2*c*c-(b*Math.cos(a)*b*Math.cos(a))-(b*Math.sin(a)*b*Math.sin(a)))/(sep*sep);
+											    var dir = new THREE.Vector3(coeff*xcom,coeff*ycom,coeff*zcom);
+											    var scale=dir.length()
+												dir.normalize();
+												var origin = new THREE.Vector3(b*Math.cos(a),b*Math.sin(a),c);
+												var arrowHelper = new THREE.ArrowHelper(dir,origin,length,hex,headlen,headwid);
+												arrowHelper.dir_mag=scale;
+											    obj.add(arrowHelper);	   
+											};  			
+							    		};
+							    	};
+							    };
+
+							    var point_color_scale=  new THREE.Color();
+
+							    var point_mag_max=0;
+							    obj.children.forEach(function(arr){
+									if(arr.dir_mag>point_mag_max){
+										point_mag_max=arr.dir_mag;
+									};
+								});		
+
+								var point_mag_min=point_mag_max;
+								obj.children.forEach(function(arr){
+									if(arr.dir_mag<point_mag_min){
+										point_mag_min=arr.dir_mag;
+									};
+								});
+
+								obj.children.forEach(function(arr){
+									var arr_value=arr.dir_mag;
+									point_color_scale.r=1.-((arr_value-point_mag_min)/(point_mag_max-point_mag_min));
+									point_color_scale.g=((arr_value-point_mag_min)/(point_mag_max-point_mag_min));
+									point_color_scale.b=0.;
+									arr.setColor(point_color_scale.getHex());
+								});									
+							    //proxy_count++;
+							    obj.arradd=true;
+				        	}else if(obj.group=="Ring"&&obj.arradd==false){
+							    for(var a=0.;a<2*pi;a=a+(pi/2.)){
+							    	for(var b=0.;b<=.4;b=b+.1){
+							    		for(var c=-.4;c<=.4;c=c+.2){
+							    			if(!(b==.2&&c==0.)){						    				
+											    var dir = new THREE.Vector3(0,0,-1);
+												dir.normalize();
+												var origin = new THREE.Vector3(b*Math.cos(a),b*Math.sin(a),c);
+												var arrowHelper = new THREE.ArrowHelper(dir,origin,length,hex,headlen,headwid);
+											    obj.add(arrowHelper);		
+											};  			
+							    		};
+							    	};
+							    };	
+							    //proxy_count++;
+							    obj.arradd=true;
+							    //Use the data imported from mag_data to set the direction of the arrows in the lattice.
+								ring_data_check=setInterval(ring_dir_set(obj),10);
+	
+
+				        	}else if(obj.group=="Line"&&obj.arradd==false){
+				        		//Handle center line arrows separate
+							    var dir = new THREE.Vector3(0,-1,0);
+								dir.normalize();
+								var origin = new THREE.Vector3(0,-.4,0);
+								var arrowHelper = new THREE.ArrowHelper(dir,origin,length,hex,headlen,headwid);
+							    obj.add(arrowHelper);
+							    var dir = new THREE.Vector3(0,-1,0);
+								dir.normalize();
+								var origin = new THREE.Vector3(0,.4,0);
+								var arrowHelper = new THREE.ArrowHelper(dir,origin,length,hex,headlen,headwid);
+							    obj.add(arrowHelper);							    				        		
+							    for(var a=-.4;a<=.4;a=a+.2){
+							    	for(var b=.2;b<=.4;b=b+.2){
+							    		for(var c=0.;c<2.*pi;c=c+(pi/2.)){
+										    var dir = new THREE.Vector3(0,-1,0);
+											dir.normalize();
+											var origin = new THREE.Vector3(b*Math.sin(c),a,b*Math.cos(c));
+											var arrowHelper = new THREE.ArrowHelper(dir,origin,length,hex,headlen,headwid);
+										    obj.add(arrowHelper);		
+							    		};
+							    	};
+							    };	
+							    //proxy_count++;
+							    obj.arradd=true;
+							    //Use the data imported from mag_data to set the direction of the arrows in the lattice.
+								line_data_check=setInterval(line_dir_set(obj),10);
+							};
+
+				        });						
+					};
+				}else if((!left.buttons[3].pressed&&!right.buttons[3].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					start_count=0;
+					//proxy_count=0;
+					//clearInterval(remove_proxy);
+					//arradd=false;
+				};
+
+				//Reset the scene
+				if((left.buttons[0].pressed&&right.buttons[0].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					reset_count++;
+					console.log(reset_count);
+					if(reset_count>120){
+						reset_count=0;
+						console.log('reset');
+						for(var i=0;i<grabbables.length;i++){						
+							console.log(grabbables.length)
+							grabbables[i].parent.remove(grabbables[i]);
+							grabbables.splice(i,1);
+							grabRadius.splice(i,1);
+						};
+
+					};
+
+				};	
+							
+			};
+
+			doGrab_simple();						//in grab.js, to move items
+
+			controls.update(); 						//Update VR headset position and apply to camera.
+
+
+			effect.render( scene, camera );	//Render the scene through the VREffect.
+			requestAnimationFrame( animate );
+		};
+
+		//Begin animation loop
+		animate();
+
+		//Setup manual hand control functions
+		var left,right;
+
+		//Need delay to allow the controllers to be registered
+		window.setTimeout(function(){
+			left=controls.controllers[0];
+			right=controls.controllers[1];
+		},1000);		
+
+
+		function ring_dir_set(ring){
+			//console.log("it is calling");
+			if(ring_mag_data[0]!=undefined){
+				console.log("ready");
+
+				var ring_mags=[]
+
+				ring_mag_data.forEach(function(dat){
+					ring_mags.push(Math.sqrt(dat[0]*dat[0]+dat[1]*dat[1]+dat[2]*dat[2]));
+				});
+
+				var ring_mag_max=0;
+				ring_mags.forEach(function(arr){
+					if(arr>ring_mag_max){
+						ring_mag_max=arr;
+					};
+				});		
+
+				var ring_mag_min=ring_mag_max;
+				ring_mags.forEach(function(arr){
+					if(arr<ring_mag_min){
+						ring_mag_min=arr;
+					};
+				});	    
+
+				var ring_color_scale= new THREE.Color()				
+
+			    for(var d=0;d<ring_mag_data.length;d++){
+			    	var new_dir=new THREE.Vector3(ring_mag_data[d][0],ring_mag_data[d][1],ring_mag_data[d][2]);
+			    	//console.log(new_dir);
+			    	//console.log(b);
+			    	ring.children[d].setDirection(new_dir.normalize());
+					ring_color_scale.r=1.-((ring_mags[d]-ring_mag_min)/(ring_mag_max-ring_mag_min));
+					ring_color_scale.g=((ring_mags[d]-ring_mag_min)/(ring_mag_max-ring_mag_min));
+					ring_color_scale.b=0.;
+					ring.children[d].setColor(ring_color_scale.getHex());
+			    };
+				clearInterval(ring_data_check);			
+			}else{
+				console.log("still no");
+			};
+		};	
+
+		function line_dir_set(line){
+			//console.log("it is calling");
+			if(line_mag_data[0]!=undefined){
+				console.log("ready");
+
+				var line_mags=[]
+
+				line_mag_data.forEach(function(dat){
+					line_mags.push(Math.sqrt(dat[0]*dat[0]+dat[1]*dat[1]+dat[2]*dat[2]));
+				});
+
+				var line_mag_max=0;
+				line_mags.forEach(function(arr){
+					if(arr>line_mag_max){
+						line_mag_max=arr;
+					};
+				});		
+
+				var line_mag_min=line_mag_max;
+				line_mags.forEach(function(arr){
+					if(arr<line_mag_min){
+						line_mag_min=arr;
+					};
+				});	    
+
+				var line_color_scale= new THREE.Color()					
+
+			    for(var d=0;d<line_mag_data.length;d++){
+			    	var new_dir=new THREE.Vector3(line_mag_data[d][0],line_mag_data[d][1],line_mag_data[d][2]);
+			    	//console.log(new_dir);
+			    	//console.log(b);
+			    	line.children[d].setDirection(new_dir.normalize());
+					line_color_scale.r=1.-((line_mags[d]-line_mag_min)/(line_mag_max-line_mag_min));
+					line_color_scale.g=((line_mags[d]-line_mag_min)/(line_mag_max-line_mag_min));
+					line_color_scale.b=0.;
+					line.children[d].setColor(line_color_scale.getHex());			    	
+			    };
+				clearInterval(line_data_check);			
+			}else{
+				console.log("still no");
+			};
+		};			
+
+		//Separate setInterval for test particle dynamics
+		//var test_part_move=setInterval(tpart_move,10);
+
+		function tpart_move(){
+			if(partmove){
+				//Move test particles
+		        test_battery.forEach(function(obj){
+			        var efield_vec=new THREE.Vector3();
+			       	var test_pos=new THREE.Vector3();
+			       	test_pos.copy(obj.position);
+			       	var test_vel=new THREE.Vector3()
+			       	battery.forEach(function(source){
+			       		var loc=source.position;
+			       		var charge=source.charge;
+			       		var separation=new THREE.Vector3();
+			       		var unit_vec=new THREE.Vector3();
+		        		separation.copy(test_pos).sub(loc);
+		        		if(separation.length()!==0){
+			        		unit_vec.copy(separation).normalize();
+			       			efield_vec=efield_vec.add(unit_vec.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+			       		};
+			       		if(separation.length()<=.2){
+			       			obj.impact=true;
+			       			//console.log('impact');
+			       			return false;
+			       		};
+			       		if(separation.length()>=.2){
+			       			obj.impact=false;
+			       		};
+			       	});
+			       	if(!obj.impact&&!obj.grabbed){
+			       		//console.log('I am free!!');
+		        		var force=efield_vec.multiplyScalar(obj.charge);
+			        	test_vel=test_vel.add(force.multiplyScalar(obj.mass*.05*5e13));
+			       		//console.log(test_vel);
+			       		test_pos=test_pos.add(test_vel.multiplyScalar(.05*5e13));
+			       		//console.log(test_pos);
+			       		obj.position.set(test_pos.x,test_pos.y,test_pos.z);
+			       	};       	
+		        });
+			};
+
+		};
+
+
+
+		//Key Binding Setup (Listen for keyboard event and zero positional sensor on appropriate keypress.)
+		function onkey(event) {
+	      event.preventDefault();
+          if (event.keyCode == 90) { // z
+	    	controls.zeroSensor(); //zero rotation
+	      } else if (event.keyCode == 70) { //f
+	    	effect.setFullScreen(true) //fullscreen
+		  } else if (event.keyCode == 73) { //i
+		    manualPosition.x += 0.01; //
+		    everything.position.x += 0.01; //
+		  } else if (event.keyCode == 75) { //k
+		    manualPosition.x -= 0.01; //
+		    everything.position.x -= 0.01; //
+		  } else if (event.keyCode == 74) { //j
+		    manualPosition.z += 0.01; //
+		    everything.position.z += 0.01; //
+		  } else if (event.keyCode == 76) { //l
+		    manualPosition.z -= 0.01; //
+		    everything.position.z -= 0.01; //
+		  } else if (event.keyCode == 85) { //u
+		    manualPosition.y += 0.01; //
+		    everything.position.y += 0.01; //
+		  } else if (event.keyCode == 79) { //o
+		    manualPosition.y -= 0.01; //
+		    everything.position.y -= 0.01; //
+		  } else if (event.keyCode == 69) { //e
+		    manualRotation += 0.01; //
+		    everything.rotation.y += 0.01; //
+		  } else if (event.keyCode == 81) { //q
+		    manualRotation -= 0.01; //
+		    everything.rotation.y -= 0.01; //
+	  	  } else if (event.keyCode == 86 || event.keyCode == 13 || event.keyCode == 32 ) { // v or 'enter' or 'space' for VR mode
+		    //vrMode = !vrMode;
+		    effect.toggleVRMode();
+		  }else if (event.keyCode == 71 ) { // g to toggle edit mode / gallery mode
+		    editMode = !editMode;
+		    for (var i = 0; i< light.length; i++){
+		    	lightSphere[i].visible = !lightSphere[i].visible;
+		    }
+		  }else if (event.keyCode == 88){//x for setting 0,0,0 pos
+		  	manualPosition.set(camera.position.x,camera.position.y,camera.position.z);
+			everything.position.set(manualPosition.x, manualPosition.y, manualPosition.z);
+		  }
+	  	};
+
+	  	window.addEventListener("keydown", onkey, true);
+
+	  	//Window Resizing
+		function onWindowResize() {
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			effect.setSize( window.innerWidth, window.innerHeight );
+		}
+
+		window.addEventListener( 'resize', onWindowResize, false );
+
+		document.body.addEventListener( 'click', doClickStuff);
+
+		function doClickStuff(event) {
+		  effect.setFullScreen(true);
+		}
+
+	</script>
+</html>

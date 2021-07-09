@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Honors Physics VR Lab</title>
+		<!--
+		Attribution
+		eleVR webvr boilerplate: https://github.com/hawksley
+		Scanned sculptures "Unscannables": Emily Eifler
+		eleVR Real Virtual Physics: https://github.com/vihart
+		-->
+	</head>
+
+	<body>
+
+	</body>
+
+	<script src="js/my_grab.js"></script>
+	<script src="js/three.min.js"></script>
+	<script src="js/VRControls.js"></script>
+	<script src="js/VREffect.js"></script>
+	<script src="lib/gl-matrix.js"></script>
+	<script src="loaders/OBJloader.js"></script>
+	<script src="loaders/MTLLoader.js"></script>
+	<script src="loaders/OBJMTLLoader.js"></script>
+	<script src="js/PhoneVR.js"></script>
+
+	<script>
+
+	</script>	
+
+	<script>
+
+		//Constants
+		var pi = 3.1415926535897932384626433832795;
+		var c=1/15; 							//Floor scale factor
+		var editMode=true; 						//For removing inhabitants from view (gallery mode in key bindings)
+		var vrMode = false;						//For entering VR display through trigger key(s)
+		var partmove=false;						//For part motion start/stop
+		var fresh_arr=false;					//For arrow mesh refresh
+		var electric_charge=1.6021765e-19; 		//Units Coulombs
+		var kap=8.988e9; 						//Units m/F
+
+		//Scene Setup
+		var scene=new THREE.Scene();
+		var camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,.001,10000);
+		var renderer=new THREE.WebGLRenderer({antialias:true});
+		document.body.appendChild(renderer.domElement);
+
+		//VR Stuff
+		var controls=new THREE.VRControls(camera,undefined,4); 	//Apply VR headset positional data to camera
+		var effect=new THREE.VREffect(renderer);				//Apply VR stereo rendering to renderer
+		effect.setSize(window.innerWidth,window.innerHeight);
+
+		//Container for all inhabitants of scene
+		var everything=new THREE.Object3D;
+
+		//Environment Setup
+		//Skybox
+		var skyTexture = new THREE.ImageUtils.loadTexture( "images/sky.jpg" );
+		var skyMaterial = new THREE.MeshBasicMaterial( { map: skyTexture, side: THREE.DoubleSide } );
+		var skyGeometry1 = new THREE.SphereGeometry(55, 30, 30);
+		var skybox = new THREE.Mesh( skyGeometry1, skyMaterial );
+		everything.add( skybox );
+		//Floor
+		var floorImage = new THREE.ImageUtils.loadTexture( "images/floor.jpg" );
+		floorImage.wrapS = floorImage.wrapT = THREE.RepeatWrapping;
+		floorImage.repeat.set( 10, 10 );
+		var floorGeometry = new THREE.PlaneBufferGeometry( 150*c, 150*c, 10 );
+		var floorMaterial = new THREE.MeshBasicMaterial( {map: floorImage, color: 0x0475a1, side: THREE.DoubleSide} );
+		var floor = new THREE.Mesh( floorGeometry, floorMaterial );
+		floor.rotation.x = 90 * Math.PI/180;
+		floor.position.y = 0;
+		floor.scale.set(8,8,8);
+		everything.add( floor );
+
+		//Grab Setup
+		var grabbables = []; 			//for objects
+		var grabRadius = []; 			//for collision
+		var originalPos = []; 			//for returning to after collision poke
+		var handPosVector = new THREE.Vector3(0,0,0);
+
+		var relative = [];
+
+		//Manually setup space for user (contollers reached through controls.controllers)
+		var manualPosition = new THREE.Vector3(0.0,-0.04,0.0); 		//for default position in a room, Vive mostly:
+		everything.position.set(manualPosition.x, manualPosition.y, manualPosition.z);
+		var manualRotation = 0;										//default rotation around vertical axis, in radians
+		everything.rotation.y = manualRotation;
+
+
+		var hands = {};
+
+		//Inhabitants of Scene
+
+		//Generate position and electric field probe
+
+		//Create probe through canvas texture on plane
+		var canvas1 = document.createElement('canvas');
+		var context1 = canvas1.getContext('2d');
+		context1.fillStyle = "rgba(0,0,0,0.95)";
+		context1.textAlign="center";
+	    context1.fillText('Hello, world!', canvas1.width/2, canvas1.height/2);
+		context1.font = "Bold 10px Arial";
+	    
+		//Create texture with canvas contents
+		var texture1 = new THREE.Texture(canvas1) 
+		texture1.needsUpdate = true;
+	     
+	    //Use texture to produce material for mesh
+	    var material1 = new THREE.MeshBasicMaterial( {map: texture1, side:THREE.DoubleSide } );
+	    material1.transparent = true;
+
+	    //Create mesh with material and plane geometry
+	    var mesh1 = new THREE.Mesh(new THREE.PlaneGeometry(2,2),material1);
+		mesh1.position.set(0,0,-1);
+		scene.add( mesh1 );
+
+	    //Generate charges
+		var battery=[];
+		var test_battery=[];
+		var l_charge_num=5;
+/*
+		//Source 1 (Positive)
+	    var geometry = new THREE.SphereGeometry(.1,32,32);
+	    geometry.faces.forEach(function(face){face.color.setRGB(1,0,0)});
+	    var part1 = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+	    part1.charge=electric_charge;
+	    part1.position.set(-1,1,0);
+	    battery[0]=part1;
+	    everything.add(part1);
+
+		//Source 2 (Negative)
+	    var geometry = new THREE.SphereGeometry(.1,32,32);
+	    geometry.faces.forEach(function(face){face.color.setRGB(0,0,1)});
+	    var part2 = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+	    part2.charge=-electric_charge;
+	    part2.position.set(1,1,0);
+	    battery[1]=part2;
+	    everything.add(part2);
+
+		//Test 1 (Positive)
+	    var geometry = new THREE.SphereGeometry(.1,32,32);
+	    geometry.faces.forEach(function(face){face.color.setRGB(0,1,0)});
+	    var part_test = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+	    part_test.charge=electric_charge;
+	    part_test.impact=false;
+	    part_test.grabbed=false;
+	    part_test.mass=1 //units Kg
+	    part_test.position.set(-.75,1.5,0);
+	    test_battery[0]=part_test;
+	    everything.add(part_test);	    
+
+
+		//moveable objects
+		grabbables[0] = part1;
+		grabbables[0].grabbed=false;
+		grabRadius[0] = 0.1;
+		originalPos[0] = part1.position;
+		grabbables[1] = part2;
+		grabbables[1].grabbed=false;
+		grabRadius[1] = 0.1;
+		originalPos[1] = part2.position;
+		grabbables[2] = part_test;
+		grabbables[2].grabbed=false;
+		grabRadius[2] = 0.1;
+		originalPos[2] = part_test.position;
+		//end grab stuff setup
+*/
+		//Generate and place rulers on the floor
+		var ruler = [];
+		var rulerNumber = 3;
+		var rulerTexture = new THREE.ImageUtils.loadTexture( "images/ruler.png" );
+		var rulerMaterial = new THREE.MeshBasicMaterial( { map: rulerTexture } )
+		var rulerGeometry = new THREE.BoxGeometry(1,0.01,0.05)
+		for (var i = 0; i < rulerNumber; i++){
+			ruler[i] = new THREE.Mesh(
+				rulerGeometry,
+				rulerMaterial
+				);
+			ruler[i].position.z =.5+i/2;
+			grabbables.push(ruler[i]);
+			grabRadius.push(0.1);
+			everything.add(grabbables[i]);
+		}
+
+	    //Generate Vector Field (Visualization)
+	    var field_size=2;
+	    var length = .25;
+	    var hex = 0xff0000;
+	    var field=[];
+	    for (var i=-field_size;i<=field_size;i=i+.5){
+	      for (var j=-field_size;j<=field_size;j=j+.5){
+	        for (var k=-field_size;k<=field_size;k=k+.5){
+          		var index=i*Math.pow(2*(2*field_size)+1,2)+j*(2*(2*field_size)+1)+k;
+	          	var arrowLoc= new THREE.Vector3(i,j+2,k);
+	          	var direction= new THREE.Vector3(i,j,k);
+	          	var scal=direction.length();
+	          	direction.normalize();
+	          	var headwid=.5;
+	          	var headlen=.5;
+	          	field[index] = new THREE.ArrowHelper( direction, arrowLoc, scal*length+1e-21, hex, headwid,headlen);
+	          	everything.add(field[index]);
+	        };
+	      };
+	    };
+
+	    for (var i=-field_size;i<=field_size;i=i+.5){
+		    for (var j=-field_size;j<=field_size;j=j+.5){
+		        for (var k=-field_size;k<=field_size;k=k+.5){
+		            var index2=i*Math.pow(2*(2*field_size)+1,2)+j*(2*(2*field_size)+1)+k;
+		            var node_loc=field[index2].position;
+		            field[index2].electric_field=new THREE.Vector3();
+		            var num=battery.length;
+		             if(num!==0){
+                		for (var c=0;c<=num-1;c=c+1){
+                			if(battery[c].children.length!=0){               				
+                				for (var g=0;g<=l_charge_num;g=g+1){
+                					//console.log('precheck');
+		                			var loc=new THREE.Vector3();
+		                			loc.copy(battery[c].position).add(battery[c].children[g].position);
+		                  			var charge=battery[c].children[g].charge;
+		                  			var separation=new THREE.Vector3();
+		                  			var unit_vec=new THREE.Vector3();
+		                  			var unit_vec1=new THREE.Vector3();
+		                  			var direction=new THREE.Vector3();
+		                  			separation.copy(node_loc).sub(loc);
+		                  			if (separation.length()!=0){
+		                    			unit_vec.copy(separation).normalize();
+		                    			unit_vec1.copy(unit_vec);
+		                    			//console.log(d);
+		                    			field[index2].electric_field=field[index2].electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+		                  			};
+		                  		};
+                				//console.log("line");
+                			}else if(battery[c].children.length==0){
+	                			var loc=battery[c].position;
+	                  			var charge=battery[c].charge;
+	                  			var separation=new THREE.Vector3();
+	                  			var unit_vec=new THREE.Vector3();
+	                  			var unit_vec1=new THREE.Vector3();
+	                  			var direction=new THREE.Vector3();
+	                  			separation.copy(node_loc).sub(loc);
+	                  			if (separation.length()!=0){
+	                    			unit_vec.copy(separation).normalize();
+	                    			unit_vec1.copy(unit_vec);
+	                    			field[index2].electric_field=field[index2].electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+	                  			};
+                  			};
+                		};
+                		field[index2].setDirection(direction.copy(field[index2].electric_field).normalize());
+                		//Scaled arrows for field strength
+                		//field[index2].setLength(length=Math.abs(field[index2].electric_field.length())*1e8+.0001);
+                		//Normalized arrows for just direction of field
+                		field[index2].setLength(length=.2,headWidth=.09);
+					}else{
+                		field[index2].setDirection(new THREE.Vector3());
+                		field[index2].setLength(length=.0001);
+              		};
+            	};
+          	};
+        };
+
+
+
+		scene.add(everything);
+
+		var create_pos_count=0;
+		var create_neg_count=0;
+		var create_test_count=0;
+		var create_pos_line_count=0;
+		var create_neg_line_count=0;		
+		var start_count=0;
+		var move_count=0;
+		var reset_count=0;
+		var test_part_move;
+		var arrow_refresh;
+		//Setup up animation function
+		function animate() {
+			t = Date.now();
+			//console.log(t);
+
+
+
+
+			if(left==undefined||right==undefined){//Check that controllers are connected
+				console.log('not yet');
+
+				//Position sprite and update
+				//mesh1.position.set(left.pose.position[0],left.pose.position[1]+.05,left.pose.position[2]);
+				//probe_loc=new THREE.Vector3(left.pose.position[0],left.pose.position[1],left.pose.position[2]);
+	            probe_electric_field=new THREE.Vector3();
+	            var num=battery.length;
+	             if(num!=0){
+            		for (var c=0;c<=num-1;c=c+1){
+            			if(battery[c].children.length!=0){  
+            				//console.log('precheck');             				
+            				for (var d=0;d<=5;d=d+1){
+            					//console.log('precheck');
+	                			var loc=new THREE.Vector3();
+	                			loc.copy(battery[c].position).add(battery[c].children[d].position);
+	                  			var charge=battery[c].children[d].charge;
+	                  			var separation=new THREE.Vector3();
+	                  			var unit_vec=new THREE.Vector3();
+	                  			var unit_vec1=new THREE.Vector3();
+	                  			var direction=new THREE.Vector3();
+	                  			separation.copy(mesh1.position).sub(loc);
+	                  			if (separation.length()!=0){
+	                    			unit_vec.copy(separation).normalize();
+	                    			unit_vec1.copy(unit_vec);
+	                    			//console.log('check');
+	                    			probe_electric_field=probe_electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+	                  			};
+	                  		};
+            			}else if(battery[c].children.length==0){
+                			var loc=battery[c].position;
+                  			var charge=battery[c].charge;
+                  			var separation=new THREE.Vector3();
+                  			var unit_vec=new THREE.Vector3();
+                  			var unit_vec1=new THREE.Vector3();
+                  			var direction=new THREE.Vector3();
+                  			separation.copy(mesh1.position).sub(loc);
+                  			if (separation.length()!=0){
+                    			unit_vec.copy(separation).normalize();
+                    			unit_vec1.copy(unit_vec);
+                    			probe_electric_field=probe_electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+                  			};
+            			};
+            		};
+				};
+				//console.log(probe_electric_field);
+				context1.clearRect(0,0,canvas1.width,canvas1.height);
+				context1.fillText('x: '+probe_electric_field.x.toPrecision(3)+',y: '+probe_electric_field.y.toPrecision(3)+',z: '+probe_electric_field.z.toPrecision(3),canvas1.width/2,canvas1.height/2);
+				context1.fillText('x: '+mesh1.position.x.toPrecision(3)+',y: '+mesh1.position.y.toPrecision(3)+',z: '+mesh1.position.z.toPrecision(3),canvas1.width/2,canvas1.height/2-10);
+				texture1.needsUpdate=true;
+
+			
+
+			};
+
+			if(left!==undefined&&right!==undefined){
+
+				//Position sprite and update
+				mesh1.position.set(left.pose.position[0],left.pose.position[1]+.05,left.pose.position[2]);
+				mesh1.quaternion.set(left.pose.orientation[0],left.pose.orientation[1],left.pose.orientation[2],left.pose.orientation[3]);
+				probe_loc=new THREE.Vector3(left.pose.position[0],left.pose.position[1],left.pose.position[2]);
+	            probe_electric_field=new THREE.Vector3();
+	            var num=battery.length;
+	             if(num!=0){
+            		for (var c=0;c<=num-1;c=c+1){
+            			if(battery[c].children.length!=0){  
+            				//console.log('precheck');             				
+            				for (var d=0;d<=5;d=d+1){
+            					//console.log('precheck');
+	                			var loc=new THREE.Vector3();
+	                			loc.copy(battery[c].position).add(battery[c].children[d].position);
+	                  			var charge=battery[c].children[d].charge;
+	                  			var separation=new THREE.Vector3();
+	                  			var unit_vec=new THREE.Vector3();
+	                  			var unit_vec1=new THREE.Vector3();
+	                  			var direction=new THREE.Vector3();
+	                  			separation.copy(mesh1.position).sub(loc);
+	                  			if (separation.length()!=0){
+	                    			unit_vec.copy(separation).normalize();
+	                    			unit_vec1.copy(unit_vec);
+	                    			//console.log('check');
+	                    			probe_electric_field=probe_electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+	                  			};
+	                  		};
+            			}else if(battery[c].children.length==0){
+                			var loc=battery[c].position;
+                  			var charge=battery[c].charge;
+                  			var separation=new THREE.Vector3();
+                  			var unit_vec=new THREE.Vector3();
+                  			var unit_vec1=new THREE.Vector3();
+                  			var direction=new THREE.Vector3();
+                  			separation.copy(mesh1.position).sub(loc);
+                  			if (separation.length()!=0){
+                    			unit_vec.copy(separation).normalize();
+                    			unit_vec1.copy(unit_vec);
+                    			probe_electric_field=probe_electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+                  			};
+            			};
+            		};
+				};
+				//console.log(probe_electric_field);
+				context1.clearRect(0,0,canvas1.width,canvas1.height);
+				context1.fillText('x: '+probe_electric_field.x.toPrecision(3)+',y: '+probe_electric_field.y.toPrecision(3)+',z: '+probe_electric_field.z.toPrecision(3),canvas1.width/2,canvas1.height/2);
+				context1.fillText('x: '+mesh1.position.x.toPrecision(3)+',y: '+mesh1.position.y.toPrecision(3)+',z: '+mesh1.position.z.toPrecision(3),canvas1.width/2,canvas1.height/2-10);
+				texture1.needsUpdate=true;							
+				
+				//Create positive charge
+				if((left.axes[0]<-.5||right.axes[0]<-.5)&&(left.axes[1]<.5||right.axes[1]<.5)&&(left.axes[1]>-.5||right.axes[1]>-.5)&&(left.buttons[0].touched||right.buttons[0].touched)){
+					create_pos_count++;
+					if(create_pos_count>120){//ticks approximately every two seconds
+						create_pos_count=0;
+						console.log('tick');
+					    var geometry = new THREE.SphereGeometry(.1,32,32);
+					    geometry.faces.forEach(function(face){face.color.setRGB(0,0,1)});
+					    var sphere = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+					    sphere.charge=electric_charge;
+					    sphere.grabbed=false;
+					    grabbables.push(sphere);
+					    grabRadius.push(.1);
+					    originalPos.push(sphere.position);
+					    battery.push(sphere);
+					    sphere.position.set(0,0,0);
+					    everything.add(sphere);	
+					    everything.remove(skybox);
+					    everything.add(skybox);					
+					};
+				};
+				//Create negative charge
+				if((left.axes[0]>.5||right.axes[0]>.5)&&(left.axes[1]<.5||right.axes[1]<.5)&&(left.axes[1]>-.5||right.axes[1]>-.5)&&(left.buttons[0].touched||right.buttons[0].touched)){
+					create_neg_count++;
+					if(create_neg_count>120){//ticks approximately every two seconds
+						create_neg_count=0;
+						console.log('tick');
+					    var geometry = new THREE.SphereGeometry(.1,32,32);
+					    geometry.faces.forEach(function(face){face.color.setRGB(1,0,0)});
+					    var sphere = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+					    sphere.charge=-electric_charge;
+					    sphere.grabbed=false;
+					    grabbables.push(sphere);
+					    grabRadius.push(.1);
+					    originalPos.push(sphere.position);
+					    battery.push(sphere);
+					    sphere.position.set(0,0,0);
+					    everything.add(sphere);						
+					};
+				};
+
+				//Create positive line charge
+				if((left.axes[1]>.5||right.axes[1]>.5)&&(left.axes[0]<.5||right.axes[0]<.5)&&(left.axes[0]>-.5||right.axes[0]>-.5)&&(left.buttons[0].touched||right.buttons[0].touched)){
+					create_pos_line_count++;
+					if(create_pos_line_count>120){//ticks approximately every two seconds
+						create_pos_line_count=0;
+						console.log('tick');
+						var line_length=.5;
+						var line_geo = new THREE.CylinderGeometry(.01,.01,line_length,30);
+						var line_mat = new THREE.MeshBasicMaterial( {color: 0x0000ff,side:THREE.DoubleSide} );
+						var line_charge = new THREE.Mesh(line_geo,line_mat);
+						//Attach embedded charges
+						var l_charge_num=5;
+						for (var s=0;s<=l_charge_num;s=s+1){
+						    var geometry = new THREE.SphereGeometry(.02,32,32);
+						    geometry.faces.forEach(function(face){face.color.setRGB(0,0,1)});
+						    var part1 = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+						    part1.charge=electric_charge;
+						    part1.position.set(0,line_length/2-line_length/l_charge_num*s,0);
+						    line_charge.add(part1);
+
+						};
+
+						line_charge.grabbed=false;
+					    grabbables.push(line_charge);
+					    grabRadius.push(.1);
+					    originalPos.push(line_charge.position);
+					    battery.push(line_charge);
+					    line_charge.position.set(0,0,0);
+					    everything.add(line_charge);					
+					};
+				};
+
+				//Create negative line charge
+				if((left.axes[1]<-.5||right.axes[1]<-.5)&&(left.axes[0]<.5||right.axes[0]<.5)&&(left.axes[0]>-.5||right.axes[0]>-.5)&&(left.buttons[0].touched||right.buttons[0].touched)){
+					create_pos_line_count++;
+					if(create_pos_line_count>120){//ticks approximately every two seconds
+						create_pos_line_count=0;
+						console.log('tick');
+						var line_length=.5;
+						var line_geo = new THREE.CylinderGeometry(.01,.01,line_length,30);
+						var line_mat = new THREE.MeshBasicMaterial( {color: 0xff0000,side:THREE.DoubleSide} );
+						var line_charge = new THREE.Mesh(line_geo,line_mat);
+						//Attach embedded charges
+						var l_charge_num=5;
+						for (var s=0;s<=l_charge_num;s=s+1){
+						    var geometry = new THREE.SphereGeometry(.02,32,32);
+						    geometry.faces.forEach(function(face){face.color.setRGB(1,0,0)});
+						    var part1 = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.FaceColors, side:THREE.DoubleSide}) );
+						    part1.charge=-electric_charge;
+						    part1.position.set(0,line_length/2-line_length/l_charge_num*s,0);
+						    line_charge.add(part1);
+
+						};
+
+						line_charge.grabbed=false;
+					    grabbables.push(line_charge);
+					    grabRadius.push(.1);
+					    originalPos.push(line_charge.position);
+					    battery.push(line_charge);
+					    line_charge.position.set(0,0,0);
+					    everything.add(line_charge);					
+					};
+				};				
+
+				//Start/Stop the dynamics
+				if((left.buttons[3].pressed||right.buttons[3].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					start_count++;
+					if(start_count>120&&!partmove){ //Additional constraint from partmove so that it does not keep redoing setInterval (save computation)
+						start_count=0;
+						console.log('start');
+						partmove=true;
+						test_part_move=setInterval(tpart_move,10);
+					};
+				}else if((!left.buttons[3].pressed&&!right.buttons[3].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					start_count=0;
+					clearInterval(test_part_move);
+					partmove=false;
+				};		
+				
+			};
+
+			doGrab_electric();						//in grab.js, to move items
+
+			controls.update(); 						//Update VR headset position and apply to camera.
+
+
+			effect.render( scene, camera );	//Render the scene through the VREffect.
+			requestAnimationFrame( animate );
+		};
+
+		//Begin animation loop
+		animate();
+
+		//Setup manual hand control functions
+		var left,right;
+
+		//Need delay to allow the controllers to be registered
+		window.setTimeout(function(){
+			left=controls.controllers[0];
+			right=controls.controllers[1];
+		},1000);		
+
+		//Had to make separate setInterval call for arrows since too many
+		// calculations for the animate function call to handle with everything else
+		//var arrow_refresh=setInterval(refresh_arr,10);
+
+		function refresh_arr(){
+			if(fresh_arr){
+				//Update field arrows
+				for (var i=-field_size;i<=field_size;i=i+.5){
+		          	for (var j=-field_size;j<=field_size;j=j+.5){
+		            	for (var k=-field_size;k<=field_size;k=k+.5){
+		              		var index2=i*Math.pow(2*(2*field_size)+1,2)+j*(2*(2*field_size)+1)+k;
+		              		var node_loc=field[index2].position;
+		              		field[index2].electric_field=new THREE.Vector3();
+		              		var num=battery.length;
+		              		if(num!==0){
+		                		for (var c=0;c<=num-1;c=c+1){
+		                			if(battery[c].children.length!=0){               				
+		                				for (var g=0;g<=l_charge_num;g=g+1){
+		                					//console.log('precheck');
+				                			var loc=new THREE.Vector3();
+				                			loc.copy(battery[c].position).add(battery[c].children[g].position);
+				                  			var charge=battery[c].children[g].charge;
+				                  			var separation=new THREE.Vector3();
+				                  			var unit_vec=new THREE.Vector3();
+				                  			var unit_vec1=new THREE.Vector3();
+				                  			var direction=new THREE.Vector3();
+				                  			separation.copy(node_loc).sub(loc);
+				                  			if (separation.length()!=0){
+				                    			unit_vec.copy(separation).normalize();
+				                    			unit_vec1.copy(unit_vec);
+				                    			//console.log(d);
+				                    			field[index2].electric_field=field[index2].electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+				                  			};
+				                  		};
+		                				//console.log("line");
+		                			}else if(battery[c].children.length==0){
+			                			var loc=battery[c].position;
+			                  			var charge=battery[c].charge;
+			                  			var separation=new THREE.Vector3();
+			                  			var unit_vec=new THREE.Vector3();
+			                  			var unit_vec1=new THREE.Vector3();
+			                  			var direction=new THREE.Vector3();
+			                  			separation.copy(node_loc).sub(loc);
+			                  			if (separation.length()!=0){
+			                    			unit_vec.copy(separation).normalize();
+			                    			unit_vec1.copy(unit_vec);
+			                    			field[index2].electric_field=field[index2].electric_field.add(unit_vec1.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+			                  			};
+		                  			};
+		                		};
+		                		field[index2].setDirection(direction.copy(field[index2].electric_field).normalize());
+		                		//Scaled arrows for field strength
+		                		//field[index2].setLength(length=Math.abs(field[index2].electric_field.length())*1e8+.0001);
+		                		//Normalized arrows for just direction of field
+		                		field[index2].setLength(length=.2,headWidth=.09);
+							}else{
+		                		field[index2].setDirection(new THREE.Vector3());
+		                		field[index2].setLength(length=.0001);
+		              		};
+		            	};
+		          	};
+		        };
+		    };
+		};
+
+		//Separate setInterval for test particle dynamics
+		//var test_part_move=setInterval(tpart_move,10);
+
+		function tpart_move(){
+			if(partmove){
+				//Move test particles
+		        test_battery.forEach(function(obj){
+			        var efield_vec=new THREE.Vector3();
+			       	var test_pos=new THREE.Vector3();
+			       	test_pos.copy(obj.position);
+			       	var test_vel=new THREE.Vector3()
+			       	battery.forEach(function(source){
+			       		var loc=source.position;
+			       		var charge=source.charge;
+			       		var separation=new THREE.Vector3();
+			       		var unit_vec=new THREE.Vector3();
+		        		separation.copy(test_pos).sub(loc);
+		        		if(separation.length()!==0){
+			        		unit_vec.copy(separation).normalize();
+			       			efield_vec=efield_vec.add(unit_vec.multiplyScalar(kap*charge/(Math.pow(separation.length(),2))));
+			       		};
+			       		if(separation.length()<=.2){
+			       			obj.impact=true;
+			       			//console.log('impact');
+			       			return false;
+			       		};
+			       		if(separation.length()>=.2){
+			       			obj.impact=false;
+			       		};
+			       	});
+			       	if(!obj.impact&&!obj.grabbed){
+			       		//console.log('I am free!!');
+		        		var force=efield_vec.multiplyScalar(obj.charge);
+			        	test_vel=test_vel.add(force.multiplyScalar(obj.mass*.05*5e13));
+			       		//console.log(test_vel);
+			       		test_pos=test_pos.add(test_vel.multiplyScalar(.05*5e13));
+			       		//console.log(test_pos);
+			       		obj.position.set(test_pos.x,test_pos.y,test_pos.z);
+			       	};       	
+		        });
+			};
+
+		};
+
+
+
+		//Key Binding Setup (Listen for keyboard event and zero positional sensor on appropriate keypress.)
+		function onkey(event) {
+	      event.preventDefault();
+          if (event.keyCode == 90) { // z
+	    	controls.zeroSensor(); //zero rotation
+	      } else if (event.keyCode == 70) { //f
+	    	effect.setFullScreen(true) //fullscreen
+		  } else if (event.keyCode == 73) { //i
+		    manualPosition.x += 0.01; //
+		    everything.position.x += 0.01; //
+		  } else if (event.keyCode == 75) { //k
+		    manualPosition.x -= 0.01; //
+		    everything.position.x -= 0.01; //
+		  } else if (event.keyCode == 74) { //j
+		    manualPosition.z += 0.01; //
+		    everything.position.z += 0.01; //
+		  } else if (event.keyCode == 76) { //l
+		    manualPosition.z -= 0.01; //
+		    everything.position.z -= 0.01; //
+		  } else if (event.keyCode == 85) { //u
+		    manualPosition.y += 0.01; //
+		    everything.position.y += 0.01; //
+		  } else if (event.keyCode == 79) { //o
+		    manualPosition.y -= 0.01; //
+		    everything.position.y -= 0.01; //
+		  } else if (event.keyCode == 69) { //e
+		    manualRotation += 0.01; //
+		    everything.rotation.y += 0.01; //
+		  } else if (event.keyCode == 81) { //q
+		    manualRotation -= 0.01; //
+		    everything.rotation.y -= 0.01; //
+	  	  } else if (event.keyCode == 86 || event.keyCode == 13 || event.keyCode == 32 ) { // v or 'enter' or 'space' for VR mode
+		    //vrMode = !vrMode;
+		    effect.toggleVRMode();
+		  }else if (event.keyCode == 71 ) { // g to toggle edit mode / gallery mode
+		    editMode = !editMode;
+		    for (var i = 0; i< light.length; i++){
+		    	lightSphere[i].visible = !lightSphere[i].visible;
+		    }
+		  }else if (event.keyCode == 88){//x for setting 0,0,0 pos
+		  	manualPosition.set(camera.position.x,camera.position.y,camera.position.z);
+			everything.position.set(manualPosition.x, manualPosition.y, manualPosition.z);
+		  }
+	  	};
+
+	  	window.addEventListener("keydown", onkey, true);
+
+	  	//Window Resizing
+		function onWindowResize() {
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			effect.setSize( window.innerWidth, window.innerHeight );
+		}
+
+		window.addEventListener( 'resize', onWindowResize, false );
+
+		document.body.addEventListener( 'click', doClickStuff);
+
+		function doClickStuff(event) {
+		  effect.setFullScreen(true);
+		}
+
+	</script>
+</html>

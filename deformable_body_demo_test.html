@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Extended Body Deformation</title>
+		<!--
+		Attribution
+		eleVR webvr boilerplate: https://github.com/hawksley
+		Scanned sculptures "Unscannables": Emily Eifler
+		eleVR Real Virtual Physics: https://github.com/vihart
+		-->
+	</head>
+
+	<body>
+
+	</body>
+
+	<script src="js/my_grab.js"></script>
+	<script src="js/three.min.js"></script>
+	<script src="js/VRControls.js"></script>
+	<script src="js/VREffect.js"></script>
+	<script src="lib/gl-matrix.js"></script>
+	<script src="loaders/OBJloader.js"></script>
+	<script src="loaders/MTLLoader.js"></script>
+	<script src="loaders/OBJMTLLoader.js"></script>
+	<script src="js/PhoneVR.js"></script>
+
+	<script>
+
+	</script>	
+
+	<script>
+
+		//Constants
+		var pi = 3.1415926535897932384626433832795;
+		var c=1/15; 			//Floor scale factor
+		var editMode=true; 		//For removing inhabitants from view (gallery mode in key bindings)
+		var vrMode = false;		//For entering VR display through trigger key(s)
+		var partmove=false;		//For part motion start/stop
+
+		//Scene Setup
+		var scene=new THREE.Scene();
+		var camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,.001,10000);
+		var renderer=new THREE.WebGLRenderer({antialias:true});
+		document.body.appendChild(renderer.domElement);
+
+		//VR Stuff
+		var controls=new THREE.VRControls(camera,undefined,4); 	//Apply VR headset positional data to camera
+		var effect=new THREE.VREffect(renderer);				//Apply VR stereo rendering to renderer
+		effect.setSize(window.innerWidth,window.innerHeight);
+
+		//Container for all inhabitants of scene
+		var everything=new THREE.Object3D;
+
+		//Environment Setup
+		//Skybox
+		var skyTexture = new THREE.ImageUtils.loadTexture( "images/sky.jpg" );
+		var skyMaterial = new THREE.MeshBasicMaterial( { map: skyTexture, side: THREE.DoubleSide } );
+		var skyGeometry1 = new THREE.SphereGeometry(55, 30, 30);
+		var skybox = new THREE.Mesh( skyGeometry1, skyMaterial );
+		everything.add( skybox );
+		//Floor
+		var floorImage = new THREE.ImageUtils.loadTexture( "images/floor.jpg" );
+		floorImage.wrapS = floorImage.wrapT = THREE.RepeatWrapping;
+		floorImage.repeat.set( 10, 10 );
+		var floorGeometry = new THREE.PlaneBufferGeometry( 150*c, 150*c, 10 );
+		var floorMaterial = new THREE.MeshBasicMaterial( {map: floorImage, color: 0x0475a1, side: THREE.DoubleSide} );
+		var floor = new THREE.Mesh( floorGeometry, floorMaterial );
+		floor.rotation.x = 90 * Math.PI/180;
+		floor.position.y = 0;
+		floor.scale.set(8,8,8);
+		everything.add( floor );
+		//Sun
+		var sunlight = new THREE.PointLight();
+		sunlight.position.set(0,5,0);
+		scene.add(sunlight);		
+
+		//Grab Setup
+		var grabbables = []; 			//for objects
+		var grabRadius = []; 			//for collision
+		var handPosVector = new THREE.Vector3(0,0,0);
+
+		var relative = [];
+
+		//Manually setup space for user (contollers reached through controls.controllers)
+		var manualPosition = new THREE.Vector3(0.0,-0.04,0.0); 		//for default position in a room, Vive mostly:
+		everything.position.set(manualPosition.x, manualPosition.y, manualPosition.z);
+		var manualRotation = 0;										//default rotation around vertical axis, in radians
+		everything.rotation.y = manualRotation;
+
+
+		var hands = {};
+
+		//Inhabitants of Scene
+
+	    //Generate Vector Field (Visualization)
+	    var field_size=2;
+	    var length = .2;
+	    var headwid=.025;
+      	var headlen=.04;	    
+	    var hex = 0xff0000;
+	    for (var i=-field_size;i<=field_size;i=i+.5){
+	      for (var j=-field_size;j<=field_size;j=j+.5){
+	        for (var k=-field_size;k<=field_size;k=k+.5){
+	          var arrowLoc= new THREE.Vector3(i,j+2,k);
+	          var direction= new THREE.Vector3(i,-j,0);
+	          var scal=direction.length();
+	          direction.normalize();
+	          //For the arrows to scale with magnitude
+	          //var arrowHelper = new THREE.ArrowHelper( direction, arrowLoc, scal*length+1e-21, hex );
+	          //For the arrows to be a normalized length
+	          var arrowHelper = new THREE.ArrowHelper( direction, arrowLoc, length, hex,headlen,headwid);	          
+	          //For color map
+	          arrowHelper.dir_mag=scal;
+	          everything.add(arrowHelper);
+	        };
+	      };
+	    }; 
+
+	    var geometry = new THREE.SphereGeometry(.1,32,32);
+	    var sphere = new THREE.Mesh( geometry, new THREE.MeshPhongMaterial({color:0xff0000}) );
+	    everything.add(sphere);
+
+		var mag_max=0;
+		everything.children.forEach(function(arr){
+			if(arr.geometry==undefined){
+				if(arr.dir_mag>mag_max){
+					mag_max=arr.dir_mag;
+				};
+			};
+		});		
+
+		var mag_min=mag_max;
+		everything.children.forEach(function(arr){
+			if(arr.geometry==undefined){
+				if(arr.dir_mag<mag_min){
+					mag_min=arr.dir_mag;
+				};
+			};				
+		});	    
+
+		var color_scale= new THREE.Color();
+
+
+		everything.children.forEach(function(arr){
+			if(arr.geometry==undefined){
+				var arr_value=arr.dir_mag;
+				color_scale.r=1.-((arr_value-mag_min)/(mag_max-mag_min));
+				color_scale.g=((arr_value-mag_min)/(mag_max-mag_min));
+				color_scale.b=0.;
+				arr.setColor(color_scale.getHex());
+
+			};
+		});	    
+
+
+
+		//moveable lights:
+		grabbables[0] = sphere;
+		grabRadius[0] = 0.1;
+		//end grab stuff setup
+
+
+
+		scene.add(everything);
+
+		var create_count=0;
+		var start_count=0;
+		var reset_count=0;
+		//Setup up animation function
+		function animate() {
+			t = Date.now();
+			//console.log(t);
+
+			if(left==undefined||right==undefined){//Check that controllers are connected
+				console.log('not yet');
+			};
+
+			if(left!==undefined&&right!==undefined){
+				//Opens menu options to add object
+				if(left.buttons[0].pressed&&!right.buttons[0].pressed){
+					if(menu_options.length==0){
+						console.log('menu up');
+						//Sphere
+					    var sphere_geometry = new THREE.SphereGeometry(.1,32,32);
+					    var sphere = new THREE.Mesh( sphere_geometry, new THREE.MeshPhongMaterial({color:0xff0000}) );
+					    grabbables.push(sphere);
+					    grabRadius.push(.1);
+						sphere.position.set((left.pose.position[0] - everything.position.x)/everything.scale.x+.25*Math.cos(pi), (left.pose.position[1] - everything.position.y)/everything.scale.y+.25*Math.sin(pi), (left.pose.position[2] - everything.position.z)/everything.scale.z);
+					    everything.add(sphere);
+					    menu_options.push(sphere);	
+					    //Cube
+					    var cube_geometry = new THREE.BoxGeometry(.1,.1,.1);
+					    var cube = new THREE.Mesh( cube_geometry, new THREE.MeshPhongMaterial({color:0xff0000}) );
+					    grabbables.push(cube);
+					    grabRadius.push(.1);
+						cube.position.set((left.pose.position[0] - everything.position.x)/everything.scale.x+.25*Math.cos(2.*pi/3.), (left.pose.position[1] - everything.position.y)/everything.scale.y+.25*Math.sin(2.*pi/3.), (left.pose.position[2] - everything.position.z)/everything.scale.z);
+					    everything.add(cube);
+					    menu_options.push(cube);
+					    //Tetrahedron
+					    var tetra_geometry = new THREE.TetrahedronGeometry(.1);
+					    var tetra = new THREE.Mesh( tetra_geometry, new THREE.MeshPhongMaterial({color:0xff0000}) );
+					    grabbables.push(tetra);
+					    grabRadius.push(.1);
+						tetra.position.set((left.pose.position[0] - everything.position.x)/everything.scale.x+.25*Math.cos(pi/3.), (left.pose.position[1] - everything.position.y)/everything.scale.y+.25*Math.sin(pi/3.), (left.pose.position[2] - everything.position.z)/everything.scale.z);
+					    everything.add(tetra);
+					    menu_options.push(tetra);
+					    //Cylinder
+					    var cylinder_geometry = new THREE.CylinderGeometry(.1,.1,.1,32,32);
+					    var cylinder = new THREE.Mesh( cylinder_geometry, new THREE.MeshPhongMaterial({color:0xff0000}) );
+					    grabbables.push(cylinder);
+					    grabRadius.push(.1);
+						cylinder.position.set((left.pose.position[0] - everything.position.x)/everything.scale.x+.25*Math.cos(0.), (left.pose.position[1] - everything.position.y)/everything.scale.y+.25*Math.sin(0.), (left.pose.position[2] - everything.position.z)/everything.scale.z);
+					    everything.add(cylinder);
+					    menu_options.push(cylinder);					    					    					    					
+					};
+				//Remove menu options when the button is not pressed
+				}else if(!left.buttons[0].pressed&&!right.buttons[0].pressed){
+					if(menu_options.length!=0){
+						for(var h=0;h<menu_options.length;h++){
+							everything.remove(menu_options[h]);
+						};						
+						for(var q=0;q<grabbables.length;q++){
+							if(grabbables[q]==menu_options[0]){
+								grabbables.splice(q,1);
+								grabRadius.splice(q,1);
+							};
+							if(grabbables[q]==menu_options[1]){
+								grabbables.splice(q,1);
+								grabRadius.splice(q,1);
+							};
+							if(grabbables[q]==menu_options[2]){
+								grabbables.splice(q,1);
+								grabRadius.splice(q,1);
+							};
+							if(grabbables[q]==menu_options[3]){
+								grabbables.splice(q,1);
+								grabRadius.splice(q,1);
+							};																					
+						};
+						menu_options=[];
+					};
+
+				};
+				//Reset the scene
+				if((left.buttons[0].pressed&&right.buttons[0].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					reset_count++;
+					if(reset_count>120){
+						reset_count=0;
+						console.log('reset');
+						for(var i=0;i<grabbables.length;i++){
+							console.log(grabbables.length)
+							grabbables[i].parent.remove(grabbables[i]);
+							grabbables.splice(i,1);
+							grabRadius.splice(i,1);
+
+						};
+
+					};
+
+				};
+				//Start/Stop the deformation
+				if((left.buttons[3].pressed||right.buttons[3].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					start_count++;
+					if(start_count>120){
+						start_count=0;
+						console.log('tock');
+						partmove=true;
+					};
+				}else if((!left.buttons[3].pressed&&!right.buttons[3].pressed)&&(!left.buttons[1].pressed&&!right.buttons[1].pressed)){
+					start_count=0;
+					partmove=false;
+				};
+				
+			};
+
+			doGrab_simple();						//in grab.js, to move items
+
+			controls.update(); 						//Update VR headset position and apply to camera.
+
+			//Vector field input
+			if (partmove){
+				grabbables.forEach(function(objects){
+					objects.geometry.vertices.forEach(function(vert){
+						//vert.x+=((vert.x+objects.position.x)*.001);
+						//vert.y-=((vert.y+objects.position.y-2)*.001);
+						vert.x+=((vert.x)*.001);
+						vert.y-=((vert.y-2)*.001);
+						objects.geometry.verticesNeedUpdate=true;
+					});	
+				});
+			};
+
+			effect.render( scene, camera );	//Render the scene through the VREffect.
+			requestAnimationFrame( animate );
+		};
+
+		//Begin animation loop
+		animate();
+
+		//Setup manual hand control functions
+		var left,right;
+
+		//Need delay to allow the controllers to be registered
+		window.setTimeout(function(){
+			left=controls.controllers[0];
+			right=controls.controllers[1];
+		},1000);		
+
+
+
+		//Key Binding Setup (Listen for keyboard event and zero positional sensor on appropriate keypress.)
+		function onkey(event) {
+	      event.preventDefault();
+          if (event.keyCode == 90) { // z
+	    	controls.zeroSensor(); //zero rotation
+	      } else if (event.keyCode == 70) { //f
+	    	effect.setFullScreen(true) //fullscreen
+		  } else if (event.keyCode == 73) { //i
+		    manualPosition.x += 0.01; //
+		    everything.position.x += 0.01; //
+		  } else if (event.keyCode == 75) { //k
+		    manualPosition.x -= 0.01; //
+		    everything.position.x -= 0.01; //
+		  } else if (event.keyCode == 74) { //j
+		    manualPosition.z += 0.01; //
+		    everything.position.z += 0.01; //
+		  } else if (event.keyCode == 76) { //l
+		    manualPosition.z -= 0.01; //
+		    everything.position.z -= 0.01; //
+		  } else if (event.keyCode == 85) { //u
+		    manualPosition.y += 0.01; //
+		    everything.position.y += 0.01; //
+		  } else if (event.keyCode == 79) { //o
+		    manualPosition.y -= 0.01; //
+		    everything.position.y -= 0.01; //
+		  } else if (event.keyCode == 69) { //e
+		    manualRotation += 0.01; //
+		    everything.rotation.y += 0.01; //
+		  } else if (event.keyCode == 81) { //q
+		    manualRotation -= 0.01; //
+		    everything.rotation.y -= 0.01; //
+	  	  } else if (event.keyCode == 86 || event.keyCode == 13 || event.keyCode == 32 ) { // v or 'enter' or 'space' for VR mode
+		    //vrMode = !vrMode;
+		    effect.toggleVRMode();
+		  }else if (event.keyCode == 71 ) { // g to toggle edit mode / gallery mode
+		    editMode = !editMode;
+		    for (var i = 0; i< light.length; i++){
+		    	lightSphere[i].visible = !lightSphere[i].visible;
+		    }
+		  }else if (event.keyCode == 88){//x for setting 0,0,0 pos
+		  	manualPosition.set(camera.position.x,camera.position.y,camera.position.z);
+			everything.position.set(manualPosition.x, manualPosition.y, manualPosition.z);
+		  }
+	  	};
+
+	  	window.addEventListener("keydown", onkey, true);
+
+	  	//Window Resizing
+		function onWindowResize() {
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			effect.setSize( window.innerWidth, window.innerHeight );
+		}
+
+		window.addEventListener( 'resize', onWindowResize, false );
+
+		document.body.addEventListener( 'click', doClickStuff);
+
+		function doClickStuff(event) {
+		  effect.setFullScreen(true);
+		}
+
+	</script>
+</html>

@@ -1,0 +1,276 @@
+Demo Manual
+
+*Simple Vector Field
+
+This is a VR environment that allows the user to view a mesh of arrows that allows the vector 
+field to be visualized by the user. The vector field is static upon initalization of enironment by user.
+The field is colored based on the magnitude of the vector at that point in the field (green is the highest
+and red is the lowest).
+Can generate, grab, and delete test objects (currently only spheres, but can be extended to any THREEjs
+geometry) through the controller input of user. The user also has the ability to start and stop the
+dynamics of the vector field at anytime.
+
+-Controller Input
+	-Generate object:
+		To generate grabble object in the environment, press the touchpad of hand with pink cursor
+		to bring up object menu which only contains one object, a sphere. Grab the sphere to place 
+		it in environment.
+
+	-Grab object:
+		To grab grabble object in the environment, hold down trigger while the controller avatar is
+		within the disignated gradRadius specified for each grabble object (grabRadius default
+		is set to .1). When grabbed object will follow the position of the hand controller until
+		the trigger is released which will place the object where the controller was when the trigger
+		was released.
+
+	-Delete object:
+		To delete grabble object in the environment, press the touchpad of the red cursor while holding 
+		an object in that hand.
+
+	-Start/Stop Vector Field Dynamics:
+		To start the dynamics of the objects moving in the vector field, press the menu button for
+		at least two seconds and continue to press which will cause the objects in the field to move 
+		according to the input field (i.e. following the arrows present in the environment)
+		To stop the dynamics of the objects moving in the vector field, release the menu button.
+
+	-Reset the environment: (do not think this is currently supported)
+		To reset the environment (remove all objects) press the touchpad on both controllers for about
+		two seconds and the objects will begin to vanish from the environment. Continue to hold to
+		remove all objects.
+
+-Program format
+	-Defines constants that will be needed throughout the code
+	-Scene setup using THREEjs scene, camera, and renderer that are appended to document body
+	-VR setup using THREEjs controls and effects to handle rendering in the headset and tracking
+	-Create object container for all things in scene to be placed in for keyboard movement controls
+		later.
+	-Setup the environment with skybox and floor using images obtained from Vihart
+	-Initialize the grabbing functionalities of the program
+	-Adjust the position of the object container manually to be position correctly in the space
+	-Generate arrow field mesh (Where you would input the vector field of interest)
+	-Generate initial object in environment and endow with grab functionalities.
+	-Add object container to the scene
+	-Initialize animate function
+		-Check to make sure the controllers are connected (timer after the animate function that 
+			continues to check)
+		-When controllers are connected define input commands from user for controllers (as listed above)
+		-Call grab function from my_grab.js to deal with grabbing/deleting functionalities.
+		-Update VR headset position and apply to camera
+		-If dynamics are started then the dynamics of the objects are called (move center of object)
+		-Renderer the scene and animate call
+	-Define keybindings for moving in the environment without VR and function to deal with window resizing
+		(To enter the VRmode must press v to present in headset)
+
+
+
+
+*Deformable Object Field (currently not supported for some reason)
+
+This is a VR environment that allows the user to view a mesh of arrows that allows the vector 
+field to be visualized by the user. The vector is static upon initalization of enironment by user.
+Can generate, grab, and delete test objects (currently only spheres, but can be extended to any THREEjs
+geometry) through the controller input of user. The user also has the ability to start and stop the
+dynamics of the vector field at anytime. The field is colored based on the magnitude of the vector at 
+that point in the field (green is highest and red is lowest). The test objects have the ability to be deformed in that
+the vector field acts on the vertices of the test objects rather than their centers.
+
+-Controller Input
+	-Generate object:
+		To generate grabble object in the environment, press the touchpad of hand with pink cursor
+		to bring up object menu which only contains four objects, a sphere, cylinder, tetraheron, and cube.
+		Grab the object to place it in environment.
+
+	-Grab object:
+		To grab grabble object in the environment, hold down trigger while the controller avatar is
+		within the disignated gradRadius specified for each grabble object (grabRadius default
+		is set to .1). When grabbed object will follow the position of the hand controller until
+		the trigger is released which will place the object where the controller was when the trigger
+		was released.
+
+	-Delete object:
+		To delete grabble object in the environment, press the touchpad of the red cursor while holding 
+		an object in that hand.
+
+	-Start/Stop Vector Field Dynamics:
+		To start the dynamics of the objects moving in the vector field, press the menu button for
+		at least two seconds and continue to press which will cause the objects in the field to move 
+		according to the input field (i.e. following the arrows present in the environment)
+		To stop the dynamics of the objects moving in the vector field, release the menu button.
+
+	-Reset the environment: (do not think this is currently supported)
+		To reset the environment (remove all objects) press the touchpad on both controllers for about
+		two seconds and the objects will begin to vanish from the environment. Continue to hold to
+		remove all objects.
+
+-Program format
+	-Defines constants that will be needed throughout the code
+	-Scene setup using THREEjs scene, camera, and renderer that are appended to document body
+	-VR setup using THREEjs controls and effects to handle rendering in the headset and tracking
+	-Create object container for all things in scene to be placed in for keyboard movement controls
+		later.
+	-Setup the environment with skybox and floor using images obtained from Vihart
+	-Initialize the grabbing functionalities of the program
+	-Adjust the position of the object container manually to be position correctly in the space
+	-Generate arrow field mesh (Where you would input the vector field of interest)
+	-Generate initial object in environment and endow with grab functionalities.
+	-Add object container to the scene
+	-Initialize animate function
+		-Check to make sure the controllers are connected (timer after the animate function that 
+			continues to check)
+		-When controllers are connected define input commands from user for controllers (as listed above)
+		-Call grab function from my_grab.js to deal with grabbing/deleting functionalities.
+		-Update VR headset position and apply to camera
+		-If dynamics are started then the dynamics of the objects are called (move vertices of object)
+		-Renderer the scene and animate call
+	-Define keybindings for moving in the environment without VR and function to deal with window resizing
+		(To enter the VRmode must press v to present in headset)
+
+
+*Electric Vector Field
+
+This is a VR environment that allows the user to view a mesh of arrows that allows the vector 
+field to be visualized by the user. The vector is dynamic and is updated by the presence of source
+charges in the environment. Can generate, grab, and delete source and test charges through the controller 
+input of user. The user also has the ability to start and stop the dynamics of the vector field at anytime
+thus pausing the motion of the test charges. The color shows the magnitude of the vector at that point (red
+is lowest and blue is the highest)
+
+-Controller Input
+	-Generate object:
+		To generate grabble object in the environment, press the touchpad of hand with pink cursor
+		to bring up object menu which only contains five objects, a test charge (green), positive charge (blue),
+		negative charge (red), positive and negative line charges (currently these are not supported). 
+		Grab the object to place it in environment.
+
+	-Grab object:
+		To grab grabble object in the environment, hold down trigger while the controller avatar is
+		within the disignated gradRadius specified for each grabble object (grabRadius default
+		is set to .1). When grabbed object will follow the position of the hand controller until
+		the trigger is released which will place the object where the controller was when the trigger
+		was released.
+
+	-Delete object:
+		To delete grabble object in the environment, press the touchpad of the red cursor while holding 
+		an object in that hand.
+
+	-Start/Stop Vector Field Dynamics:
+		To start the dynamics of the objects moving in the vector field, press the menu button for
+		at least two seconds and continue to press which will cause the test charges in the field to move 
+		according to the input field (i.e. following the arrows present in the environment)
+		To stop the dynamics of the objects moving in the vector field, release the menu button.
+
+	-Reset the environment: (do not think this is currently supported)
+		To reset the environment (remove all objects) press the touchpad on both controllers for about
+		two seconds and the objects will begin to vanish from the environment. Continue to hold to
+		remove all objects.
+
+-Program format
+	-Defines constants that will be needed throughout the code
+	-Scene setup using THREEjs scene, camera, and renderer that are appended to document body
+	-VR setup using THREEjs controls and effects to handle rendering in the headset and tracking
+	-Create object container for all things in scene to be placed in for keyboard movement controls
+		later.
+	-Setup the environment with skybox and floor using images obtained from Vihart
+	-Initialize the grabbing functionalities of the program
+	-Adjust the position of the object container manually to be position correctly in the space
+	-Generate arrow field mesh (Where you would input the vector field of interest)
+	-Generate initial object in environment and endow with grab functionalities.
+	-Add object container to the scene
+	-Initialize animate function
+		-Check to make sure the controllers are connected (timer after the animate function that 
+			continues to check)
+		-When controllers are connected define input commands from user for controllers (as listed above)
+		-Call grab function from my_grab.js to deal with grabbing/deleting functionalities.
+		-Update VR headset position and apply to camera
+		-If dynamics are started then the dynamics of the objects are called (test charge motion with
+			separate update call from animate)
+			-If source charge is grabbed update the arrow mesh (separate update call from animate)
+		-Renderer the scene and animate call
+	-Define keybindings for moving in the environment without VR and function to deal with window resizing
+		(To enter the VRmode must press v to present in headset)
+
+
+
+
+*Magnetic Vector Field
+
+This is a VR environment that allows the user to view the magnetic field of various magnetic field sources.
+The fields are attached to the sources and do not interact with the other objects. The colors show the magnitude
+of the vector at that point (green is the highest and red is the lowest).
+
+-Controller Input
+	-Generate object:
+		To generate grabble object in the environment, press the touchpad of hand with pink cursor
+		to bring up object menu which only contains three objects, a ring of current, magnetic point
+		dipole, and segment of current. (grab center of the objects) Grab the object to place it in environment.
+
+	-Grab object:
+		To grab grabble object in the environment, hold down trigger while the controller avatar is
+		within the disignated gradRadius specified for each grabble object (grabRadius default
+		is set to .1). When grabbed object will follow the position of the hand controller until
+		the trigger is released which will place the object where the controller was when the trigger
+		was released. (make sure to grab center of objects)
+
+	-Delete object:
+		To delete grabble object in the environment, press the touchpad of the red cursor while holding 
+		an object in that hand.
+
+	-Start/Stop Vector Field Dynamics:
+		To start the dynamics of the objects moving in the vector field, press the menu button for
+		at least two seconds and continue to press which will cause the field to appear attached to
+		the objects.
+
+	-Reset the environment: (do not think this is currently supported)
+		To reset the environment (remove all objects) press the touchpad on both controllers for about
+		two seconds and the objects will begin to vanish from the environment. Continue to hold to
+		remove all objects.
+
+-Program format
+	-Defines constants that will be needed throughout the code
+	-Scene setup using THREEjs scene, camera, and renderer that are appended to document body
+	-VR setup using THREEjs controls and effects to handle rendering in the headset and tracking
+	-Create object container for all things in scene to be placed in for keyboard movement controls
+		later.
+	-Setup the environment with skybox and floor using images obtained from Vihart
+	-Initialize the grabbing functionalities of the program
+	-Adjust the position of the object container manually to be position correctly in the space
+	-Generate arrow field mesh (Where you would input the vector field of interest)
+	-Generate initial object in environment and endow with grab functionalities.
+	-Add object container to the scene
+	-Initialize animate function
+		-Check to make sure the controllers are connected (timer after the animate function that 
+			continues to check)
+		-When controllers are connected define input commands from user for controllers (as listed above)
+		-Call grab function from my_grab.js to deal with grabbing/deleting functionalities.
+		-Update VR headset position and apply to camera
+		-If dynamics are started then the dynamics of the objects are called (test charge motion with
+			separate update call from animate)
+			-If source charge is grabbed update the arrow mesh (separate update call from animate)
+		-Renderer the scene and animate call
+	-Define keybindings for moving in the environment without VR and function to deal with window resizing
+		(To enter the VRmode must press v to present in headset)		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
